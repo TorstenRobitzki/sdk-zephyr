@@ -400,6 +400,19 @@ int mqtt_sn_publish(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 int mqtt_sn_input(struct mqtt_sn_client *client);
 
 /**
+ * @brief Check the transport for capacity on the outgoing side.
+ *
+ * Call this function if you have a good reason to believe that there is enough capacity
+ * on the outgoing side of the link, so that pending outgoing messages could be send.
+ *
+ * @param client            The MQTT-SN client to check for incoming data.
+ *
+ * @return -EINVAL if the client is invalid or the transport contains no means to send data.
+ *         Otherwise, 0 is returned.
+ */
+int mqtt_sn_output(struct mqtt_sn_client *client);
+
+/**
  * @brief Get topic name by topic ID.
  *
  * @param[in] client The MQTT-SN client that uses this topic.
