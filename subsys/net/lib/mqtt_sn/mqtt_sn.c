@@ -11,9 +11,10 @@
 
 #include "mqtt_sn_msg.h"
 
+#include <assert.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/mqtt_sn.h>
-LOG_MODULE_REGISTER(net_mqtt_sn, CONFIG_MQTT_SN_LOG_LEVEL);
+LOG_MODULE_REGISTER(net_mqtt_sn, 4);
 
 #define MQTT_SN_NET_BUFS (CONFIG_MQTT_SN_LIB_MAX_PUBLISH)
 
@@ -91,10 +92,12 @@ static int encode_and_send(struct mqtt_sn_client *client, struct mqtt_sn_param *
 
 	err = mqtt_sn_encode_msg(&client->tx, p);
 	if (err) {
+		LOG_ERR("Failed to encode msg %d", err);
 		goto end;
 	}
 
-	LOG_HEXDUMP_DBG(client->tx.data, client->tx.len, "Send message");
+	//LOG_HEXDUMP_DBG(client->tx.data, client->tx.len, "Send message");
+	LOG_INF("Send message %d", client->tx.len );
 
 	if (!client->transport->msg_send) {
 		LOG_ERR("Can't send: no callback");
@@ -411,17 +414,15 @@ static void mqtt_sn_do_register(struct mqtt_sn_client *client, struct mqtt_sn_to
 	encode_and_send(client, &p);
 }
 
-static void mqtt_sn_do_publish(struct mqtt_sn_client *client, struct mqtt_sn_publish *pub, bool dup)
+static int mqtt_sn_do_publish(struct mqtt_sn_client *client, struct mqtt_sn_publish *pub, bool dup)
 {
 	struct mqtt_sn_param p = {.type = MQTT_SN_MSG_TYPE_PUBLISH};
 
-	if (!client || !pub) {
-		return;
-	}
+	assert(client && pub);
 
 	if (client->state != MQTT_SN_CLIENT_ACTIVE) {
-		LOG_ERR("Cannot subscribe: not connected");
-		return;
+		LOG_ERR("Cannot publish: not connected");
+		return -ENOTCONN;
 	}
 
 	LOG_INF("Publishing to topic ID %d", pub->topic->topic_id);
@@ -435,7 +436,7 @@ static void mqtt_sn_do_publish(struct mqtt_sn_client *client, struct mqtt_sn_pub
 	p.params.publish.qos = pub->qos;
 	p.params.publish.dup = dup;
 
-	encode_and_send(client, &p);
+	return encode_and_send(client, &p);
 }
 
 static void mqtt_sn_do_ping(struct mqtt_sn_client *client)
@@ -474,7 +475,8 @@ static int process_pubs(struct mqtt_sn_client *client, int64_t *next_cycle)
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&client->publish, pub, pubs, next) {
 		LOG_HEXDUMP_DBG(pub->topic->name, pub->topic->namelen,
 				"Processing publish for topic");
-		LOG_HEXDUMP_DBG(pub->pubdata, pub->datalen, "Processing publish data");
+		LOG_DBG("Processing publish data: %d", pub->datalen);
+		//LOG_HEXDUMP_DBG(pub->pubdata, pub->datalen, "Processing publish data");
 
 		if (pub->con.last_attempt == 0) {
 			next_attempt = 0;
@@ -489,7 +491,7 @@ static int process_pubs(struct mqtt_sn_client *client, int64_t *next_cycle)
 			case MQTT_SN_TOPIC_STATE_REGISTERING:
 			case MQTT_SN_TOPIC_STATE_SUBSCRIBING:
 			case MQTT_SN_TOPIC_STATE_UNSUBSCRIBING:
-				LOG_INF("Can't publish; topic is not ready");
+				LOG_INF("Can't publish; topic is not ready, %d", (int)pub->topic->state);
 				break;
 			case MQTT_SN_TOPIC_STATE_REGISTERED:
 			case MQTT_SN_TOPIC_STATE_SUBSCRIBED:
@@ -498,7 +500,11 @@ static int process_pubs(struct mqtt_sn_client *client, int64_t *next_cycle)
 					mqtt_sn_disconnect_internal(client);
 					return -ETIMEDOUT;
 				}
-				mqtt_sn_do_publish(client, pub, dup);
+
+				int rc = mqtt_sn_do_publish(client, pub, dup);
+				if ( rc != 0 )
+					return rc;
+
 				if (pub->qos == MQTT_SN_QOS_0 || pub->qos == MQTT_SN_QOS_M1) {
 					/* We are done, remove this */
 					mqtt_sn_publish_destroy(client, pub);
@@ -784,6 +790,7 @@ int mqtt_sn_subscribe(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 	if (!topic) {
 		topic = mqtt_sn_topic_create(topic_name);
 		if (!topic) {
+LOG_ERR("!topic\n");
 			return -ENOMEM;
 		}
 
@@ -857,6 +864,7 @@ int mqtt_sn_publish(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 	if (!topic) {
 		topic = mqtt_sn_topic_create(topic_name);
 		if (!topic) {
+LOG_ERR("!topic\n");
 			return -ENOMEM;
 		}
 
@@ -868,6 +876,7 @@ int mqtt_sn_publish(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 	pub = mqtt_sn_publish_create(data);
 	if (!pub) {
 		k_work_reschedule(&client->process_work, K_NO_WAIT);
+LOG_ERR("!mqtt_sn_publish_create\n");
 		return -ENOMEM;
 	}
 
@@ -1225,6 +1234,17 @@ int mqtt_sn_input(struct mqtt_sn_client *client)
 
 	/* Should be zero */
 	return -client->rx.len;
+}
+
+int mqtt_sn_output(struct mqtt_sn_client *client)
+{
+	// if (!client || !client->transport || !client->transport->msg_send) {
+	// 	return -EINVAL;
+	// }
+
+	// k_work_reschedule(&client->process_work, K_NO_WAIT);
+
+	return 0;
 }
 
 int mqtt_sn_get_topic_name(struct mqtt_sn_client *client, uint16_t id,
