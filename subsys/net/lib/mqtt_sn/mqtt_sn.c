@@ -14,7 +14,7 @@
 #include <assert.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/mqtt_sn.h>
-LOG_MODULE_REGISTER(net_mqtt_sn, 4);
+LOG_MODULE_REGISTER(net_mqtt_sn, CONFIG_MQTT_SN_LOG_LEVEL);
 
 #define MQTT_SN_NET_BUFS (CONFIG_MQTT_SN_LIB_MAX_PUBLISH)
 
@@ -475,8 +475,7 @@ static int process_pubs(struct mqtt_sn_client *client, int64_t *next_cycle)
 	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&client->publish, pub, pubs, next) {
 		LOG_HEXDUMP_DBG(pub->topic->name, pub->topic->namelen,
 				"Processing publish for topic");
-		LOG_DBG("Processing publish data: %d", pub->datalen);
-		//LOG_HEXDUMP_DBG(pub->pubdata, pub->datalen, "Processing publish data");
+		LOG_HEXDUMP_DBG(pub->pubdata, pub->datalen, "Processing publish data");
 
 		if (pub->con.last_attempt == 0) {
 			next_attempt = 0;
@@ -790,7 +789,6 @@ int mqtt_sn_subscribe(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 	if (!topic) {
 		topic = mqtt_sn_topic_create(topic_name);
 		if (!topic) {
-LOG_ERR("!topic\n");
 			return -ENOMEM;
 		}
 
@@ -864,7 +862,6 @@ int mqtt_sn_publish(struct mqtt_sn_client *client, enum mqtt_sn_qos qos,
 	if (!topic) {
 		topic = mqtt_sn_topic_create(topic_name);
 		if (!topic) {
-LOG_ERR("!topic\n");
 			return -ENOMEM;
 		}
 
@@ -876,7 +873,6 @@ LOG_ERR("!topic\n");
 	pub = mqtt_sn_publish_create(data);
 	if (!pub) {
 		k_work_reschedule(&client->process_work, K_NO_WAIT);
-LOG_ERR("!mqtt_sn_publish_create\n");
 		return -ENOMEM;
 	}
 
@@ -1238,11 +1234,11 @@ int mqtt_sn_input(struct mqtt_sn_client *client)
 
 int mqtt_sn_output(struct mqtt_sn_client *client)
 {
-	// if (!client || !client->transport || !client->transport->msg_send) {
-	// 	return -EINVAL;
-	// }
+	if (!client || !client->transport || !client->transport->msg_send) {
+		return -EINVAL;
+	}
 
-	// k_work_reschedule(&client->process_work, K_NO_WAIT);
+	k_work_reschedule(&client->process_work, K_NO_WAIT);
 
 	return 0;
 }
