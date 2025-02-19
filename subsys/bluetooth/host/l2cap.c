@@ -959,8 +959,9 @@ struct net_buf *l2cap_data_pull(struct bt_conn *conn,
 	 * static channels don't have the concept of L2CAP segments.
 	 */
 	bool last_seg = lechan->_pdu_remaining == pdu->len;
+	bool sdu_end  = ( last_frag && last_seg ) || conn->state != BT_CONN_CONNECTED;
 
-	if (last_frag && last_seg) {
+	if (sdu_end) {
 		LOG_DBG("last frag of last seg, dequeuing %p", pdu);
 		__maybe_unused struct net_buf *b = k_fifo_get(&lechan->tx_queue, K_NO_WAIT);
 
@@ -968,7 +969,6 @@ struct net_buf *l2cap_data_pull(struct bt_conn *conn,
 	}
 
 	if (last_frag && L2CAP_LE_CID_IS_DYN(lechan->tx.cid)) {
-		bool sdu_end = last_frag && last_seg;
 
 		LOG_DBG("adding %s callback", sdu_end ? "`sdu_sent`" : "NULL");
 		/* No user callbacks for SDUs */
