@@ -641,17 +641,17 @@ static void process_work(struct k_work *wrk)
 	}
 
 	if (client->state == MQTT_SN_CLIENT_ACTIVE) {
+		err = process_ping(client, &next_cycle);
+		if (err) {
+			return;
+		}
+
 		err = process_topics(client, &next_cycle);
 		if (err) {
 			return;
 		}
 
 		err = process_pubs(client, &next_cycle);
-		if (err) {
-			return;
-		}
-
-		err = process_ping(client, &next_cycle);
 		if (err) {
 			return;
 		}
